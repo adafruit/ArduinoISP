@@ -38,6 +38,37 @@
 // IDE 22 - 5148 bytes
 // IDE 1.0 - 5524 bytes!
 
+
+// SLOW SPEED CHIP ERASE AND FUSE BURNING
+//
+// Enable LOW_SPEED to allow you to erase chips that would fail otherwise,
+// for being running with a clock too slow for the programmer.
+//
+// This allowed me to recover several ATMega328 that had no boot loader and the
+// first instruction was to set the clock to the slowest speed. Usually this
+// kind of recovery requires high voltage programming, but this trick will do
+// just fine.
+//
+// How to proceed:
+// 1. Enable LOW_SPEED, and load it to the programmer.
+// 2. Erase and burn the fuses on the target uC. Example for ATMega328:
+//   arduino-1.0.1/hardware/tools/avrdude -Carduino-1.0.1/hardware/tools/avrdude.conf -patmega328p -cstk500v1 -P /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A900cf1Q-if00-port0 -b19200 -e -Ulock:w:0x3F:m -Uefuse:w:0x05:m -Uhfuse:w:0xDA:m -Ulfuse:w:0xF7:m
+// 3. Comment LOW_SPEED and load it back to the programmer.
+// 4. Program the target uC as usual. Example:
+//  arduino-1.0.1/hardware/tools/avrdude -Carduino-1.0.1/hardware/tools/avrdude.conf -patmega328p -cstk500v1 -P /dev/serial/by-id/usb-FTDI_FT232R_USB_UART_A900cf1Q-if00-port0 -b19200 -Uflash:w:firmware.hex:i 
+//
+// Note 1: EXTRA_SPI_DELAY was added to let you slow down SPI even more. You can
+// play with the value if it does not work with the default.
+// Note 2: LOW_SPEED will alow you only to erase the chip and burn the fuses! It
+// will fail if you try to program the target uC this way!
+
+//#define LOW_SPEED
+#ifdef LOW_SPEED
+#define EXTRA_SPI_DELAY 125
+#else
+#define EXTRA_SPI_DELAY 0
+#endif
+
 #include "pins_arduino.h"  // defines SS,MOSI,MISO,SCK
 #define RESET SS
 
@@ -98,6 +129,7 @@ byte buff[256];  // temporary buffer
 boolean EOP_SEEN = false;
 
 void setup() {
+
   Serial.begin(19200);
   pinMode(PIEZO, OUTPUT);
   beep(1700, 40);
@@ -119,6 +151,8 @@ void setup() {
   // OC1A output, fast PWM
   TCCR1A = _BV(WGM11) | _BV(COM1A1);
   TCCR1B = _BV(WGM13) | _BV(WGM12) | _BV(CS10); // no clock prescale
+  
+ 
 }
 
 #define beget16(addr) (*addr * 256 + *(addr+1) )
@@ -259,6 +293,9 @@ void pulse(int pin, int times) {
 void spi_init() {
   byte x;
   SPCR = 0x53;
+#ifdef LOW_SPEED
+SPCR=SPCR|B00000011;
+#endif
   x=SPSR;
   x=SPDR;
 }
@@ -271,10 +308,22 @@ void spi_wait() {
 
 byte spi_send(byte b) {
   byte reply;
+#ifdef LOW_SPEED
+    cli();
+    CLKPR=B10000000;
+    CLKPR=B00000011;
+    sei();
+#endif
   SPDR=b;
   spi_wait();
   reply = SPDR;
-  return reply;
+#ifdef LOW_SPEED
+    cli();
+    CLKPR=B10000000;
+    CLKPR=B00000000;
+   sei();
+#endif
+    return reply;
 }
 
 byte spi_transaction(byte a, byte b, byte c, byte d) {
@@ -365,9 +414,9 @@ void start_pmode() {
   digitalWrite(RESET, HIGH);
   pinMode(SCK, OUTPUT);
   digitalWrite(SCK, LOW);
-  delay(50);
+  delay(50+EXTRA_SPI_DELAY);
   digitalWrite(RESET, LOW);
-  delay(50);
+  delay(50+EXTRA_SPI_DELAY);
   pinMode(MISO, INPUT);
   pinMode(MOSI, OUTPUT);
   spi_transaction(0xAC, 0x53, 0x00, 0x00);
