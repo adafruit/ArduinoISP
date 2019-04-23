@@ -1,4 +1,10 @@
-# ArduinoISP2 #
+## This repository has been archived
+
+The contents were transferred to https://github.com/adafruit/Adafruit_Learning_System_Guides/tree/master/ArduinoISP
+
+## ArduinoISP2
+
+This code was used in an Adafruit tutorial at https://learn.adafruit.com/arduino-tips-tricks-and-techniques/arduinoisp
 
  March 2012 William Phelps - wm (at) usa.net 
  
